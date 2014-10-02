@@ -1,40 +1,42 @@
 import Network
 import System.IO
+import System.Exit
 import System.Environment
 import Control.Monad
 import Control.Exception
-import Control.Concurrent (forkIO)
+import Control.Concurrent
 
 startServer :: Int -> IO ()
 startServer port =
-    bracket
+    bracketOnError
         ( createSocket )
         ( sClose )
-        ( \sock -> forever $ do
-            (handle, host, port) <- accept sock
-            hSetBuffering handle NoBuffering
-            putStrLn $ "Accepted connection from " ++ show (host, port)
-            forkIO $ talk handle host port
+        ( \sock ->
+            (forever $ do
+                (handle, host, port) <- accept sock
+                hSetBuffering handle NoBuffering
+                forkIO $ handleCommand handle host port
+            )
         )
-    where createSocket = do
+    where
+        createSocket = do
             putStrLn $ "Listening on " ++ (show port)
             sock <- listenOn $ PortNumber (fromIntegral port)
             return sock
 
-talk :: Handle -> HostName -> PortNumber -> IO ()
-talk handle host port = catchDisconnect (forever readLine) disconnect
-    where
-        readLine = do
-            line <- hGetLine handle
-            putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ line
+handleCommand :: Handle -> HostName -> PortNumber -> IO ()
+handleCommand handle host port = do
+    line <- hGetLine handle
+    putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ line
+
+    let command = words line
+    case (head command) of
+        (_) -> do
             hPutStrLn handle $ line
             hFlush handle
             hClose handle
-        disconnect err = do
-            putStrLn $ "Closed connection from " ++ show (host, port)
-            hClose handle
 
-catchDisconnect :: IO a -> (IOException -> IO a) -> IO a
+catchDisconnect :: IO a -> (IOError -> IO a) -> IO a
 catchDisconnect = catch
 
 main :: IO ()
