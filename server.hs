@@ -11,29 +11,31 @@ startServer port =
         ( createSocket )
         ( sClose )
         ( \sock -> forever $ do
-            conn@(handle, host, port) <- accept sock
+            (handle, host, port) <- accept sock
+            hSetBuffering handle NoBuffering
             putStrLn $ "Accepted connection from " ++ show (host, port)
-            forkIO $ talk conn
+            forkIO $ talk handle host port
         )
     where createSocket = do
             putStrLn $ "Listening on " ++ (show port)
             sock <- listenOn $ PortNumber (fromIntegral port)
             return sock
 
-catchDisconnect :: IO a -> (IOException -> IO a) -> IO a
-catchDisconnect = Control.Exception.catch
-
-talk (handle, host, port) = catchDisconnect (forever readLine) disconnect
+talk :: Handle -> HostName -> PortNumber -> IO ()
+talk handle host port = catchDisconnect (forever readLine) disconnect
     where
         readLine = do
             line <- hGetLine handle
-            putStrLn line
-            hPutStrLn handle line
+            putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ line
+            hPutStrLn handle $ line
             hFlush handle
-        disconnect err = do
-            putStr $ "Closed connection from " ++ show (host, port)
-            putStrLn $ " - Reason: " ++ show err
             hClose handle
+        disconnect err = do
+            putStrLn $ "Closed connection from " ++ show (host, port)
+            hClose handle
+
+catchDisconnect :: IO a -> (IOException -> IO a) -> IO a
+catchDisconnect = catch
 
 main :: IO ()
 main = withSocketsDo $ do
