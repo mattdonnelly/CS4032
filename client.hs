@@ -5,14 +5,19 @@ import Control.Monad
 import Control.Exception
 
 startClient :: String -> Int -> IO ()
-startClient host port = forever $ do
+startClient host port = do
     handle <- connectTo host (PortNumber $ fromIntegral port)
     putStr $ "Enter a message to send: "
     msg <- getLine
     hPutStrLn handle msg
     response <- receiveResponse handle ""
-    putStrLn response
+    putStr response
     hClose handle
+    if response /= "KILL_SERVICE\n" then
+        startClient host port
+    else
+        return ()
+
 
 receiveResponse :: Handle -> String -> IO String
 receiveResponse handle sofar = do
