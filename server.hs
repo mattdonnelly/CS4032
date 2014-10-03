@@ -31,6 +31,13 @@ handleCommand handle host port = do
 
     let command = words line
     case (head command) of
+        ("HELO") -> do
+            hPutStrLn handle line
+            hPutStrLn handle $ "IP: " ++ host
+            hPutStrLn handle $ "Port: " ++ (show port)
+            hPutStrLn handle "StudentID: 11350561"
+            hFlush handle
+            hClose handle
         (_) -> do
             hPutStrLn handle $ line
             hFlush handle

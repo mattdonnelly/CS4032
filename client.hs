@@ -19,7 +19,11 @@ receiveResponse handle sofar = do
     response <- try (hGetLine handle) :: IO (Either IOError String)
     case response of
         Left err -> return sofar
-        Right responseStr -> receiveResponse handle (sofar ++ responseStr)
+        Right responseStr ->
+            if (length responseStr > 0) then
+                receiveResponse handle (sofar ++ responseStr ++ "\n")
+            else
+                receiveResponse handle sofar
 
 main :: IO ()
 main = withSocketsDo $ do
