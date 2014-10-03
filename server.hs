@@ -1,31 +1,33 @@
 import Network
+import Network.Socket hiding (sClose, accept)
 import System.IO
-import System.Exit
 import System.Environment
-import Control.Monad
 import Control.Exception
 import Control.Concurrent
 
 startServer :: Int -> IO ()
-startServer port =
-    bracketOnError
-        ( createSocket )
-        ( sClose )
-        ( \sock ->
-            (forever $ do
-                (handle, host, port) <- accept sock
-                hSetBuffering handle NoBuffering
-                forkIO $ handleCommand handle host port
-            )
-        )
+startServer port = bracket createSocket sClose mainLoop
     where
         createSocket = do
             putStrLn $ "Listening on " ++ (show port)
             sock <- listenOn $ PortNumber (fromIntegral port)
             return sock
 
-handleCommand :: Handle -> HostName -> PortNumber -> IO ()
-handleCommand handle host port = do
+        mainLoop sock = do
+            (handle, host, port) <- accept sock
+            hSetBuffering handle NoBuffering
+            forkIO $ handleCommand sock handle host port
+
+            connected <- isListening sock
+
+            if (connected) then
+                mainLoop sock
+            else
+                return ()
+
+
+handleCommand :: Socket -> Handle -> HostName -> PortNumber -> IO ()
+handleCommand sock handle host port = do
     line <- hGetLine handle
     putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ line
 
@@ -36,15 +38,13 @@ handleCommand handle host port = do
             hPutStrLn handle $ "IP: " ++ host
             hPutStrLn handle $ "Port: " ++ (show port)
             hPutStrLn handle "StudentID: 11350561"
-            hFlush handle
-            hClose handle
-        (_) -> do
-            hPutStrLn handle $ line
-            hFlush handle
-            hClose handle
+        ("KILL_SERVICE") -> do
+            hPutStrLn handle line
+            sClose sock
+        (_) -> hPutStrLn handle line
 
-catchDisconnect :: IO a -> (IOError -> IO a) -> IO a
-catchDisconnect = catch
+    hClose handle
+
 
 main :: IO ()
 main = withSocketsDo $ do
