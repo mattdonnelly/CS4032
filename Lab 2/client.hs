@@ -1,5 +1,6 @@
 import Network
 import System.IO
+import System.Exit
 import System.Environment
 import Control.Monad
 import Control.Exception
@@ -7,17 +8,19 @@ import Control.Exception
 startClient :: String -> Int -> IO ()
 startClient host port = do
     handle <- connectTo host (PortNumber $ fromIntegral port)
-    putStr $ "Enter a message to send: "
-    msg <- getLine
-    hPutStrLn handle msg
-    response <- receiveResponse handle ""
-    putStr response
-    hClose handle
-    if response /= "KILL_SERVICE\n" then
-        startClient host port
-    else
-        return ()
 
+    putStr $ "Enter a message to send: "
+    message <- getLine
+    hPutStrLn handle message
+    response <- receiveResponse handle ""
+
+    hClose handle
+
+    case response of
+        "KILL_SERVICE\n" -> putStrLn "Terminating..."
+        otherwise -> do
+            putStr response
+            startClient host port
 
 receiveResponse :: Handle -> String -> IO String
 receiveResponse handle sofar = do

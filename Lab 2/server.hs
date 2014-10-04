@@ -1,50 +1,40 @@
 import Network
-import Network.Socket hiding (sClose, accept)
 import System.IO
+import System.Exit
 import System.Environment
-import Control.Exception
+import Control.Monad
 import Control.Concurrent
 
 startServer :: Int -> IO ()
-startServer port = bracket createSocket sClose mainLoop
-    where
-        createSocket = do
-            putStrLn $ "Listening on " ++ (show port)
-            sock <- listenOn $ PortNumber (fromIntegral port)
-            return sock
+startServer port = do
+    putStrLn $ "Listening on " ++ (show port)
+    sock <- listenOn $ PortNumber (fromIntegral port)
+    forever $ do
+        (handle, host, port) <- accept sock
+        hSetBuffering handle NoBuffering
+        forkIO $ handleRequest sock handle host port
 
-        mainLoop sock = do
-            (handle, host, port) <- accept sock
-            hSetBuffering handle NoBuffering
-            forkIO $ handleCommand sock handle host port
+handleRequest :: Socket -> Handle -> HostName -> PortNumber -> IO ()
+handleRequest sock handle host port = do
+    message <- hGetLine handle
+    putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ message
 
-            connected <- isListening sock
-
-            if (connected) then
-                mainLoop sock
-            else
-                return ()
-
-
-handleCommand :: Socket -> Handle -> HostName -> PortNumber -> IO ()
-handleCommand sock handle host port = do
-    line <- hGetLine handle
-    putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ line
-
-    let command = words line
-    case (head command) of
-        ("HELO") -> do
-            hPutStrLn handle line
-            hPutStrLn handle $ "IP: " ++ host
-            hPutStrLn handle $ "Port: " ++ (show port)
-            hPutStrLn handle "StudentID: 11350561"
-        ("KILL_SERVICE") -> do
-            hPutStrLn handle line
+    case head $ words message of
+        "HELO" -> hPutStrLn handle $ buildHELOResponse message host port
+        "KILL_SERVICE" -> do
+            putStrLn "Terminating..."
+            hPutStrLn handle message
             sClose sock
-        (_) -> hPutStrLn handle line
+            exitSuccess
+        otherwise -> putStrLn "Unknown Command"
 
     hClose handle
 
+buildHELOResponse :: String -> HostName -> PortNumber -> String
+buildHELOResponse message host port = message ++ "\n" ++
+                                      "IP: " ++ host ++ "\n" ++
+                                      "Port: " ++ show port ++ "\n" ++
+                                      "StudentID: 11350561"
 
 main :: IO ()
 main = withSocketsDo $ do
