@@ -12,7 +12,7 @@ startClient :: String -> Int -> IO ()
 startClient host port = forever $ do
     sock <- connectSocket host port
 
-    putStr $ "Enter a message to send: "
+    prompt "Enter a message to send: "
     message <- getLine
 
     send sock (path ++ buildQuery message ++ " " ++ protocol)
@@ -36,6 +36,11 @@ receiveResponse sock sofar = do
 
 buildQuery :: String -> String
 buildQuery s = intercalate "+" $ words s
+
+prompt :: String -> IO ()
+prompt p = do
+    putStr p
+    hFlush stdout
 
 main :: IO ()
 main = withSocketsDo $ do
