@@ -2,31 +2,34 @@ import Network
 import System.IO
 import System.Exit
 import System.Environment
-import Control.Monad
+import Control.Exception
 import Control.Concurrent
 
 startServer :: Int -> IO ()
 startServer port = do
-    putStrLn $ "Listening on " ++ (show port)
+    putStrLn $ "Listening on port " ++ (show port) ++ "..."
     sock <- listenOn $ PortNumber (fromIntegral port)
-    forever $ do
-        (handle, host, port) <- accept sock
-        hSetBuffering handle NoBuffering
-        forkIO $ handleRequest sock handle host port
+    acceptConnections sock
 
-handleRequest :: Socket -> Handle -> HostName -> PortNumber -> IO ()
-handleRequest sock handle host port = do
+acceptConnections :: Socket -> IO ()
+acceptConnections sock = do
+    res <- try $ accept sock :: IO (Either IOError (Handle, HostName, PortNumber))
+    case res of
+        Left _ -> exitSuccess
+        Right (handle, host, port) -> do
+            hSetBuffering handle NoBuffering
+            forkIO $ processRequest sock handle host port
+            acceptConnections sock
+
+processRequest :: Socket -> Handle -> HostName -> PortNumber -> IO ()
+processRequest sock handle host port = do
     message <- hGetLine handle
     putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ message
 
     case head $ words message of
         "HELO" -> hPutStrLn handle $ buildHELOResponse message host port
-        "KILL_SERVICE" -> do
-            putStrLn "Terminating..."
-            hPutStrLn handle message
-            sClose sock
-            exitSuccess
-        otherwise -> putStrLn "Unknown Command"
+        "KILL_SERVICE" -> putStrLn "Terminating..." >> hPutStr handle message >> sClose sock
+        otherwise -> putStrLn $ "Unknown Command:" ++ message
 
     hClose handle
 

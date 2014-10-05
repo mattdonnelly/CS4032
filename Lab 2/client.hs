@@ -3,35 +3,30 @@ import System.IO
 import System.Exit
 import System.Environment
 import Control.Monad
-import Control.Exception
 
 startClient :: String -> Int -> IO ()
-startClient host port = do
-    handle <- connectTo host (PortNumber $ fromIntegral port)
+startClient host port = forever $ do
+    sock <- connectTo host (PortNumber $ fromIntegral port)
+    hSetBuffering sock NoBuffering
 
-    putStr $ "Enter a message to send: "
+    message <- prompt "Enter a message to send: "
+    hPutStrLn sock message
+
+    when (head (words message) == "KILL_SERVICE") $ do
+        putStrLn "Terminating..."
+        exitSuccess
+
+    response <- hGetContents sock
+    putStrLn response
+
+    hClose sock
+
+prompt :: String -> IO String
+prompt p = do
+    putStr p
+    hFlush stdout
     message <- getLine
-    hPutStrLn handle message
-    response <- receiveResponse handle ""
-
-    hClose handle
-
-    case response of
-        "KILL_SERVICE\n" -> putStrLn "Terminating..."
-        otherwise -> do
-            putStr response
-            startClient host port
-
-receiveResponse :: Handle -> String -> IO String
-receiveResponse handle sofar = do
-    response <- try (hGetLine handle) :: IO (Either IOError String)
-    case response of
-        Left err -> return sofar
-        Right responseStr ->
-            if (length responseStr > 0) then
-                receiveResponse handle (sofar ++ responseStr ++ "\n")
-            else
-                receiveResponse handle sofar
+    return message
 
 main :: IO ()
 main = withSocketsDo $ do
