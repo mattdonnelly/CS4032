@@ -1,22 +1,24 @@
 import Network.Socket
+import System.IO
+import System.Environment
+import Control.Monad
 import Control.Exception
+import Data.List
 
-type HTTPRequest = Socket
+path     = "GET /echo.php?message="
+protocol = "HTTP/1.1\r\n\r\n"
 
-createHTTPRequest :: String -> Int -> IO HTTPRequest
-createHTTPRequest = connectSocket
+startClient :: String -> Int -> IO ()
+startClient host port = forever $ do
+    sock <- connectSocket host port
 
-httpGET :: HTTPRequest -> String -> [(String,String)] -> IO String
-httpGET request path params = sendMessageOverSocket request message
-                              where
-                                paramString = createQueryString params
-                                message = "GET " ++ path ++ paramString ++ " HTTP/1.0\r\n\r\n"
+    putStr $ "Enter a message to send: "
+    message <- getLine
 
-createQueryString :: [(String,String)] -> String
-createQueryString [] = ""
-createQueryString params = foldl (\x y -> x ++ y ++ "&" ) "?" params'
-                           where
-                                params' = map (\(x,y) -> x ++ "=" ++ y) params
+    send sock (path ++ buildQuery message ++ " " ++ protocol)
+
+    response <- receiveResponse sock ""
+    putStrLn response
 
 connectSocket :: String -> Int -> IO Socket
 connectSocket host port = do
@@ -25,27 +27,18 @@ connectSocket host port = do
     connect sock (addrAddress addrInfo)
     return sock
 
-sendMessageOverSocket :: Socket -> String -> IO String
-sendMessageOverSocket sock message = do
-    send sock message
-    response <- receiveResponse sock
-    return response
-
-receiveResponse :: Socket -> IO String
-receiveResponse sock = receiveResponse' sock ""
-
-receiveResponse' :: Socket -> String -> IO String
-receiveResponse' sock sofar = do
+receiveResponse :: Socket -> String -> IO String
+receiveResponse sock sofar = do
     response <- try (recv sock 4096) :: IO (Either IOError String)
     case response of
-        Left e ->
-            return sofar
-        Right responseStr -> do
-            putStrLn responseStr
-            receiveResponse' sock (sofar ++ responseStr)
+        Left e -> return sofar
+        Right responseStr -> receiveResponse sock (sofar ++ responseStr)
+
+buildQuery :: String -> String
+buildQuery s = intercalate "+" $ words s
 
 main :: IO ()
-main = do
-    sock <- connectSocket "localhost" 8000
-    response <- sendMessageOverSocket sock "hello\r\n"
-    putStrLn response
+main = withSocketsDo $ do
+    (host:portStr:_) <- getArgs
+    let port = (read $ portStr :: Int)
+    startClient host port
