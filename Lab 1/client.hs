@@ -29,9 +29,9 @@ connectSocket host port = do
 
 receiveResponse :: Socket -> String -> IO String
 receiveResponse sock sofar = do
-    response <- try (recv sock 4096) :: IO (Either IOError String)
+    response <- try $ recv sock 4096 :: IO (Either IOError String)
     case response of
-        Left e -> return sofar
+        Left _ -> return sofar
         Right responseStr -> receiveResponse sock (sofar ++ responseStr)
 
 buildQuery :: String -> String

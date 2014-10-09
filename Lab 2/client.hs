@@ -2,6 +2,7 @@ import Network
 import System.IO
 import System.Exit
 import System.Environment
+import Control.Exception
 import Control.Monad
 
 startClient :: String -> Int -> IO ()
@@ -12,11 +13,12 @@ startClient host port = forever $ do
     message <- prompt "Enter a message to send: "
     hPutStrLn sock message
 
-    when (head (words message) == "KILL_SERVICE") $ do
+    response <- hGetContents sock
+
+    when (head (words response) == "KILL_SERVICE") $ do
         putStrLn "Terminating..."
         exitSuccess
 
-    response <- hGetContents sock
     putStrLn response
 
     hClose sock
