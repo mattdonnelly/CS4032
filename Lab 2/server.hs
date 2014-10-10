@@ -51,15 +51,15 @@ acceptConnections sock sem = do
 
             canAquireSem <- checkSemaphore sem
             if canAquireSem then do
-                forkIO $ processRequest sock handle host port
+                forkIO $ processRequest sock handle host port sem
                 acceptConnections sock sem
             else do
                 hPutStrLn handle "SERVER_BUSY"
                 hClose handle
                 acceptConnections sock sem
 
-processRequest :: Socket -> Handle -> HostName -> PortNumber -> IO ()
-processRequest sock handle host port = do
+processRequest :: Socket -> Handle -> HostName -> PortNumber -> Semaphore -> IO ()
+processRequest sock handle host port sem = do
     message <- hGetLine handle
     putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ message
 
@@ -69,6 +69,7 @@ processRequest sock handle host port = do
         otherwise -> putStrLn $ "Unknown Command:" ++ message
 
     hClose handle
+    signalSemaphore sem
 
 buildHELOResponse :: String -> HostName -> PortNumber -> String
 buildHELOResponse message host port = message ++ "\n" ++
