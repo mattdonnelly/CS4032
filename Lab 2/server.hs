@@ -64,7 +64,7 @@ processRequest sock handle host port = do
     putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ message
 
     case head $ words message of
-        "HELO" -> hPutStrLn handle $ buildHELOResponse message host port
+        "HELO" -> hPutStr handle $ buildHELOResponse message host port
         "KILL_SERVICE" -> hPutStr handle message >> sClose sock
         otherwise -> putStrLn $ "Unknown Command:" ++ message
 
