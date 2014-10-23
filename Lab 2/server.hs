@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 import Network
+import Network.Socket hiding (accept, sClose)
 import System.IO
 import System.Exit
 import System.Environment
@@ -72,10 +73,10 @@ processRequest sock handle host port sem = do
     signalSemaphore sem
 
 buildHELOResponse :: String -> HostName -> PortNumber -> String
-buildHELOResponse message host port = message ++ "\n" ++
-                                      "IP: " ++ host ++ "\n" ++
-                                      "Port: " ++ show port ++ "\n" ++
-                                      "StudentID: 11350561"
+buildHELOResponse message host port = message ++ "macneill.scss.tcd.ie\n" ++
+                                      "IP:" ++ host ++ "\n" ++
+                                      "Port:" ++ show port ++ "\n" ++
+                                      "StudentID:11350561"
 
 main :: IO ()
 main = withSocketsDo $ do
