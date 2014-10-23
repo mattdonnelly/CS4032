@@ -79,7 +79,7 @@ getFQDN = do
     return host
 
 buildHELOResponse :: String -> HostName -> PortNumber -> String
-buildHELOResponse message host port = message ++ host ++ "\n" ++
+buildHELOResponse message host port = message ++ "\n" ++
                                       "IP:" ++ host ++ "\n" ++
                                       "Port:" ++ show port ++ "\n" ++
                                       "StudentID:11350561"
