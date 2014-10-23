@@ -39,28 +39,28 @@ startServer port = do
     sock <- listenOn $ PortNumber (fromIntegral port)
     sem <- newSemaphore maxConnections
     host <- getFQDN
-    acceptConnections sock host sem
+    acceptConnections sock host port sem
 
-acceptConnections :: Socket -> HostName -> Semaphore -> IO ()
-acceptConnections sock host sem = do
+acceptConnections :: Socket -> HostName -> Int -> Semaphore -> IO ()
+acceptConnections sock host port sem = do
     res <- try $ accept sock :: IO (Either IOError (Handle, HostName, PortNumber))
     case res of
         Left _ -> do
             putStrLn "Terminating..."
             exitSuccess
-        Right (handle, _, port) -> do
+        Right (handle, _, _) -> do
             hSetBuffering handle NoBuffering
 
             canAquireSem <- checkSemaphore sem
             if canAquireSem then do
                 forkIO $ processRequest sock handle host port sem
-                acceptConnections sock host sem
+                acceptConnections sock host port sem
             else do
                 hPutStrLn handle "SERVER_BUSY"
                 hClose handle
-                acceptConnections sock host sem
+                acceptConnections sock host port sem
 
-processRequest :: Socket -> Handle -> HostName -> PortNumber -> Semaphore -> IO ()
+processRequest :: Socket -> Handle -> HostName -> Int -> Semaphore -> IO ()
 processRequest sock handle host port sem = do
     message <- hGetLine handle
     putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ message
@@ -78,7 +78,7 @@ getFQDN = do
     (HostEntry host _ _ _) <- (getHostName >>= getHostByName)
     return host
 
-buildHELOResponse :: String -> HostName -> PortNumber -> String
+buildHELOResponse :: String -> HostName -> Int -> String
 buildHELOResponse message host port = message ++ "\n" ++
                                       "IP:" ++ host ++ "\n" ++
                                       "Port:" ++ show port ++ "\n" ++
