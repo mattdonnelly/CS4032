@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 import Network
-import Network.Socket hiding (accept, sClose)
+import Network.BSD
 import System.IO
 import System.Exit
 import System.Environment
@@ -38,26 +38,27 @@ startServer port = do
     putStrLn $ "Listening on port " ++ (show port) ++ "..."
     sock <- listenOn $ PortNumber (fromIntegral port)
     sem <- newSemaphore maxConnections
-    acceptConnections sock sem
+    host <- getFQDN
+    acceptConnections sock host sem
 
-acceptConnections :: Socket -> Semaphore -> IO ()
-acceptConnections sock sem = do
+acceptConnections :: Socket -> HostName -> Semaphore -> IO ()
+acceptConnections sock host sem = do
     res <- try $ accept sock :: IO (Either IOError (Handle, HostName, PortNumber))
     case res of
         Left _ -> do
             putStrLn "Terminating..."
             exitSuccess
-        Right (handle, host, port) -> do
+        Right (handle, _, port) -> do
             hSetBuffering handle NoBuffering
 
             canAquireSem <- checkSemaphore sem
             if canAquireSem then do
                 forkIO $ processRequest sock handle host port sem
-                acceptConnections sock sem
+                acceptConnections sock host sem
             else do
                 hPutStrLn handle "SERVER_BUSY"
                 hClose handle
-                acceptConnections sock sem
+                acceptConnections sock host sem
 
 processRequest :: Socket -> Handle -> HostName -> PortNumber -> Semaphore -> IO ()
 processRequest sock handle host port sem = do
@@ -72,8 +73,13 @@ processRequest sock handle host port sem = do
     hClose handle
     signalSemaphore sem
 
+getFQDN :: IO HostName
+getFQDN = do
+    (HostEntry host _ _ _) <- (getHostName >>= getHostByName)
+    return host
+
 buildHELOResponse :: String -> HostName -> PortNumber -> String
-buildHELOResponse message host port = message ++ "macneill.scss.tcd.ie\n" ++
+buildHELOResponse message host port = message ++ host ++ "\n" ++
                                       "IP:" ++ host ++ "\n" ++
                                       "Port:" ++ show port ++ "\n" ++
                                       "StudentID:11350561"
