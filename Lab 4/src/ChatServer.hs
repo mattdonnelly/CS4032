@@ -2,13 +2,35 @@ module ChatServer where
 
 import Semaphore
 
-import Network
-import Network.BSD
-import System.IO
-import System.Exit
-import System.Environment
-import Control.Exception
-import Control.Concurrent
+import Control.Concurrent (MVar, newMVar, forkIO)
+import Control.Exception (try)
+import Control.Monad (void)
+import Data.Map (Map, empty)
+import Network (Socket, PortID(PortNumber), listenOn, accept)
+import Network.BSD (HostEntry(HostEntry), HostName, PortNumber(PortNumber), getHostName, getHostByName)
+import System.IO (Handle, BufferMode(NoBuffering), hSetBuffering, hPutStrLn, hGetLine, hClose)
+import System.Exit (exitSuccess)
+
+data Env = Env {
+      envHostName :: String
+    , envPortNumber :: Int
+    , envSocket :: Socket
+    , envSemaphore :: Semaphore
+    , envChannels :: MVar (Map String Channel)
+}
+
+data Channel = Channel {
+      channelID :: Int
+    , channelName :: String
+    , channelUsers :: [User]
+}
+
+data User = User {
+      userNick :: String
+    , userIPAddress :: String
+    , userPortNumber :: Int
+    , userHandle :: Handle
+}
 
 maxConnections :: Int
 maxConnections = 200
@@ -16,14 +38,23 @@ maxConnections = 200
 startServer :: Int -> IO ()
 startServer port = do
     putStrLn $ "Listening on port " ++ (show port) ++ "..."
-    host <- getFQDN
-    sock <- listenOn $ PortNumber (fromIntegral port)
-    sem <- newSemaphore maxConnections
-    acceptConnections sock host port sem
 
-acceptConnections :: Socket -> HostName -> Int -> Semaphore -> IO ()
-acceptConnections sock host port sem = do
-    res <- try $ accept sock :: IO (Either IOError (Handle, HostName, PortNumber))
+    host <- getFQDN
+    sock <- listenOn $ PortNumber $ fromIntegral port
+    sem <- newSemaphore maxConnections
+    channels <- newMVar empty
+
+    let env = Env host port sock sem channels
+    acceptConnections env
+
+getFQDN :: IO HostName
+getFQDN = do
+    (HostEntry host _ _ _) <- (getHostName >>= getHostByName)
+    return host
+
+acceptConnections :: Env -> IO ()
+acceptConnections env = do
+    res <- try $ accept (envSocket env) :: IO (Either IOError (Handle, HostName, PortNumber))
     case res of
         Left _ -> do
             putStrLn "Terminating..."
@@ -31,35 +62,44 @@ acceptConnections sock host port sem = do
         Right (handle, _, _) -> do
             hSetBuffering handle NoBuffering
 
-            canAquireSem <- checkSemaphore sem
+            canAquireSem <- checkSemaphore (envSemaphore env)
+
             if canAquireSem then do
-                forkIO $ processRequest sock handle host port sem
-                acceptConnections sock host port sem
+                void $ forkIO $ processRequest env handle
+                acceptConnections env
             else do
                 hPutStrLn handle "SERVER_BUSY"
                 hClose handle
-                acceptConnections sock host port sem
+                acceptConnections env
 
-processRequest :: Socket -> Handle -> HostName -> Int -> Semaphore -> IO ()
-processRequest sock handle host port sem = do
+processRequest :: Env -> Handle -> IO ()
+processRequest env handle = do
+    let host = envHostName env
+    let port = envPortNumber env
+    let sock = envSocket env
+
     message <- hGetLine handle
     putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ message
 
     case head $ words message of
-        "HELO" -> hPutStr handle $ buildHELOResponse message host port
-        "KILL_SERVICE" -> hPutStr handle message >> sClose sock
-        otherwise -> putStrLn $ "Unknown Command:" ++ message
+        "JOIN_CHATROOM" -> handleJoin env handle message
+        "LEAVE_CHATROOM" -> handleJoin env handle message
+        "CHAT" -> handleChat env handle message
+        "DISCONNECT" -> handleDisconnect env handle
+        _ -> putStrLn $ "Unknown Command:" ++ message
 
+    signalSemaphore $ envSemaphore env
+
+handleJoin :: Env -> Handle -> String -> IO ()
+handleJoin env handle message = return ()
+
+handleLeave :: Env -> Handle -> String -> IO ()
+handleLeave env handle message = return ()
+
+handleChat :: Env -> Handle -> String -> IO ()
+handleChat env handle message = return ()
+
+handleDisconnect :: Env -> Handle -> IO ()
+handleDisconnect env handle = do
     hClose handle
-    signalSemaphore sem
-
-getFQDN :: IO HostName
-getFQDN = do
-    (HostEntry host _ _ _) <- (getHostName >>= getHostByName)
-    return host
-
-buildHELOResponse :: String -> HostName -> Int -> String
-buildHELOResponse message host port = message ++ "\n" ++
-                                      "IP:" ++ host ++ "\n" ++
-                                      "Port:" ++ show port ++ "\n" ++
-                                      "StudentID:11350561"
+    signalSemaphore $ envSemaphore env

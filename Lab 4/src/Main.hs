@@ -8,5 +8,5 @@ import System.Environment (getArgs)
 main :: IO ()
 main = withSocketsDo $ do
     args <- getArgs
-    let port = (read $ head args :: Int)
+    let port = read $ head args :: Int
     startServer port
