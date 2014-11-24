@@ -74,12 +74,11 @@ acceptConnections env = do
 
 processRequest :: Env -> Handle -> IO ()
 processRequest env handle = do
-    let host = envHostName env
-    let port = envPortNumber env
-    let sock = envSocket env
-
     message <- hGetLine handle
-    putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ message
+
+    putStrLn $ "[" ++ envHostName env
+                ++ ":" ++ (show $ envPortNumber env) ++ "]"
+                ++ " " ++ message
 
     case head $ words message of
         "JOIN_CHATROOM" -> handleJoin env handle message
