@@ -1,43 +1,42 @@
 module ChatServer where
 
-import Semaphore
+import Semaphore (Semaphore, newSemaphore, checkSemaphore, signalSemaphore)
 
 import Control.Concurrent (MVar, newMVar, forkIO)
 import Control.Exception (try)
 import Control.Monad (void)
 import Data.Map (Map, empty)
+import qualified Data.Map as Map
 import Network (Socket, PortID(PortNumber), listenOn, accept)
-import Network.BSD (HostEntry(HostEntry), HostName, PortNumber(PortNumber), getHostName, getHostByName)
+import Network.BSD (HostEntry(HostEntry, hostName), HostName, PortNumber(PortNumber), getHostName, getHostByName)
 import System.IO (Handle, BufferMode(NoBuffering), hSetBuffering, hPutStrLn, hGetLine, hClose)
 import System.Exit (exitSuccess)
 
-data Env = Env {
-      envHostName :: String
+data Env = Env
+    { envHostName :: String
     , envPortNumber :: Int
     , envSocket :: Socket
     , envSemaphore :: Semaphore
     , envChannels :: MVar (Map String Channel)
-}
+    }
 
-data Channel = Channel {
-      channelID :: Int
+data Channel = Channel
+    { channelID :: Int
     , channelName :: String
     , channelUsers :: [User]
-}
+    }
 
-data User = User {
-      userNick :: String
-    , userIPAddress :: String
-    , userPortNumber :: Int
+data User = User
+    { userNick :: String
     , userHandle :: Handle
-}
+    }
 
 maxConnections :: Int
 maxConnections = 200
 
 startServer :: Int -> IO ()
 startServer port = do
-    putStrLn $ "Listening on port " ++ (show port) ++ "..."
+    putStrLn $ "Listening on port " ++ show port ++ "..."
 
     host <- getFQDN
     sock <- listenOn $ PortNumber $ fromIntegral port
@@ -49,8 +48,8 @@ startServer port = do
 
 getFQDN :: IO HostName
 getFQDN = do
-    (HostEntry host _ _ _) <- (getHostName >>= getHostByName)
-    return host
+    host <- getHostName >>= getHostByName
+    return $ hostName host
 
 acceptConnections :: Env -> IO ()
 acceptConnections env = do
@@ -77,20 +76,29 @@ processRequest env handle = do
     message <- hGetLine handle
 
     putStrLn $ "[" ++ envHostName env
-                ++ ":" ++ (show $ envPortNumber env) ++ "]"
+                ++ ":" ++ show (envPortNumber env) ++ "]"
                 ++ " " ++ message
 
     case head $ words message of
-        "JOIN_CHATROOM" -> handleJoin env handle message
-        "LEAVE_CHATROOM" -> handleJoin env handle message
-        "CHAT" -> handleChat env handle message
-        "DISCONNECT" -> handleDisconnect env handle
-        _ -> putStrLn $ "Unknown Command:" ++ message
+        "JOIN_CHATROOM:" -> handleJoin env handle message
+        "LEAVE_CHATROOM:" -> handleJoin env handle message
+        "CHAT:" -> handleChat env handle message
+        "DISCONNECT:" -> handleDisconnect env handle
+        otherwise -> putStrLn $ "Unknown Command:" ++ message
 
     signalSemaphore $ envSemaphore env
 
 handleJoin :: Env -> Handle -> String -> IO ()
-handleJoin env handle message = return ()
+handleJoin env handle message = do
+    let msgWords = words message
+    let roomName = msgWords !! 1
+    let clientName = msgWords !! 7
+
+    hPutStrLn handle $ "JOINED_CHATROOM: " ++ roomName ++ "\n" ++
+                       "SERVER_IP: " ++ envHostName env ++ "\n" ++
+                       "PORT: " ++ show (envPortNumber env) ++ "\n" ++
+                       "ROOM_REF: " ++ "1234" ++ "\n" ++
+                       "JOIN_ID: " ++ "1234"
 
 handleLeave :: Env -> Handle -> String -> IO ()
 handleLeave env handle message = return ()
