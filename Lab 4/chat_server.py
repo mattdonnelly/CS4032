@@ -32,6 +32,7 @@ class ChatServer:
 
     def start(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             self.socket.bind((self.host, self.port))
         except socket.error as e:
@@ -53,6 +54,9 @@ class ChatServer:
                                                 (self.users[i],))
             except select.error:
                 break
+
+        self.socket.shutdown(1)
+        self.socket.close()
 
     def recv_all(self, sock):
         total = ''
@@ -85,6 +89,8 @@ class ChatServer:
             if words[0][0] == "JOIN_CHATROOM:":
                 user.nick = words[3][1]
                 self.handle_join(user, words[0][1])
+            if words[0][0] == "LEAVE_CHATROOM:":
+                self.hande_leave(user, words[0][1])
 
     def handle_join(self, user, channel_name):
         channel = None
@@ -115,3 +121,6 @@ class ChatServer:
                                    random.randrange(2147483647))
 
         user.socket.sendall(response)
+
+    def handle_leave(self, user, channel_name):
+        pass
