@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import platform
-import random
 import select
 import socket
 import sys
@@ -52,10 +50,9 @@ class ChatServer:
                     else:
                         thread.start_new_thread(self.proccess_requests,
                                                 (self.users[i],))
-            except select.error:
+            except (KeyboardInterrupt, SystemExit, select.error):
                 break
 
-        self.socket.shutdown(1)
         self.socket.close()
 
     def recv_all(self, sock):
@@ -115,10 +112,10 @@ class ChatServer:
                    "JOIN_ID: {4}\n"
 
         response = response.format(channel_name,
-                                   platform.node(),
+                                   socket.getfqdn(),
                                    self.port,
                                    channel_id,
-                                   random.randrange(2147483647))
+                                   len(channel.users))
 
         user.socket.sendall(response)
 
