@@ -5,5 +5,5 @@ from chat_server import *
 
 if __name__ == '__main__':
     port = sys.argv[1]
-    server = ChatServer()
+    server = ChatServer("127.0.0.1", int(port))
     server.start()

@@ -2,86 +2,102 @@
 
 import platform
 import random
+import select
 import socket
 import sys
 import thread
 
 
 class User:
-    def __init__(self, nick, conn):
+    def __init__(self, sock, nick, id):
+        self.socket = sock
         self.nick = nick
-        self.conn = conn
+        self.id = id
 
 
 class Channel:
     def __init__(self, id, name, users):
         self.id = id
         self.name = name
-        self.users = users
+        self.users = []
 
 
 class ChatServer:
-    def __init__(self, port=8000):
-        self.host = "127.0.0.1"
+    def __init__(self, host="127.0.0.1", port=8000):
+        self.host = host
         self.port = port
         self.channels = {}
+        self.users = {}
+        self.server_sockets = []
 
     def start(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.bind((self.host, self.port))
-        self.socket.listen(10)
+        try:
+            self.socket.bind((self.host, self.port))
+        except socket.error as e:
+            print "Could not bind port %s: %s." % (self.port, e)
+            sys.exit(1)
+        self.socket.listen(5)
 
-        print "Started listening on port {0}...".format(self.port)
+        print "Started server on port {0}:{1}...".format(self.host, self.port)
 
-        self.accept_connections()
+        while True:
+            try:
+                reading_sockets, _, _ = select.select(self.server_sockets
+                                                      + [self.socket], [], [])
+                for i, sock in enumerate(reading_sockets):
+                    if sock is self.socket:
+                        self.accept_connections()
+                    else:
+                        thread.start_new_thread(self.proccess_requests,
+                                                (self.users[i],))
+            except select.error:
+                break
+
+    def recv_all(self, sock):
+        total = ''
+        try:
+            data = sock.recv(2048)
+            total += data
+        except socket.error, e:
+            print "Socket error: {0}".format(e)
+
+        return total
 
     def accept_connections(self):
-        while 1:
-            (conn, address) = self.socket.accept()
-            thread.start_new_thread(self.proccess_requests, (conn,))
+        (sock, _) = self.socket.accept()
+        user_id = len(self.users)
+        new_user = User(sock, "", user_id)
+        self.users[user_id] = new_user
+        self.server_sockets.append(sock)
 
-    def proccess_requests(self, conn):
-        try:
-            for message in self.read_messages(conn):
-                words = message.split()
+        print "New client joined with id: {0}".format(user_id)
 
-                if words[0] == "JOIN_CHATROOM:":
-                    self.handleJoin(conn, words)
-        except (KeyboardInterrupt, SystemExit):
-            print "Closing connection..."
-            conn.close()
+        thread.start_new_thread(self.proccess_requests, (new_user,))
 
-    def read_messages(self, conn, recv_buffer=4096, delimiter='\r\n\r\n'):
-        buffer = ''
-        data = True
-        while data:
-            data = conn.recv(recv_buffer)
-            buffer += data
+    def proccess_requests(self, user):
+        data = self.recv_all(user.socket)
 
-            while buffer.find(delimiter) != -1:
-                msg, buffer = buffer.split(delimiter, 1)
-                yield msg
+        words = data.splitlines()
+        words = map(lambda s: s.split(), words)
 
-    def handleJoin(self, conn, words):
-        channel_name = words[1]
-        user_name = words[7]
+        if len(words) > 0:
+            if words[0][0] == "JOIN_CHATROOM:":
+                user.nick = words[3][1]
+                self.handle_join(user, words[0][1])
 
-        print channel_name
-        print user_name
-
-        user = User(user_name, conn)
-
+    def handle_join(self, user, channel_name):
         channel = None
-        channel_id = 0
+        channel_id = None
 
         if channel_name in self.channels:
             channel = self.channels[channel_name]
             channel_id = channel.id
 
-            if user_name not in channel.users:
-                channel.users[user_name] = user
+            if user not in channel.users:
+                channel.users.append(user)
         else:
-            channel_id = random.randrange(2147483647)
+            channel_id = len(self.channels)
             channel = Channel(channel_id, channel_name, [user])
 
         self.channels[channel_name] = channel
@@ -98,4 +114,4 @@ class ChatServer:
                                    channel_id,
                                    random.randrange(2147483647))
 
-        conn.sendall(response)
+        user.socket.sendall(response)
