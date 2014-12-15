@@ -14,7 +14,7 @@ class FileServer:
         self.users = {}
         self.server_sockets = []
 
-    def start():
+    def start(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
