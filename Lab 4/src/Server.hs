@@ -8,6 +8,8 @@ import Control.Exception hiding (handle)
 import Control.Lens
 import Control.Monad
 import Control.Monad.State
+import Data.Hashable
+import Data.List (delete)
 import Data.Map (Map)
 import Data.Maybe (fromJust)
 import qualified Data.Map as Map
@@ -34,7 +36,7 @@ data ServerEnv = ServerEnv
     , _serverPort :: String
     , _serverSock :: Socket
     , _serverSem :: Semaphore
-    , _serverChannels :: MVar (Map String Channel)
+    , _serverChannels :: MVar (Map Int Channel)
     , _serverUsers :: MVar (Map String User)
     }
 
@@ -97,7 +99,7 @@ processRequest conn = forever $ do
             putStrLn "Client disconnected."
             exitSuccess
         Right msg -> do
-            liftIO $ putStrLn msg
+            liftIO $ putStrLn $ "RECEIVED REQUEST - " ++ msg
             handleRequest msg conn
 
 handleRequest :: String -> Socket -> Server ()
@@ -106,36 +108,46 @@ handleRequest msg conn = do
 
     case head msgWords of
         "JOIN_CHATROOM:" -> handleJoin conn (msgWords !! 1) (msgWords !! 7)
+        "LEAVE_CHATROOM:" -> handleLeave conn (read $ msgWords !! 1) (msgWords !! 3) (msgWords !! 5)
+        "DISCONNECT:" -> handleDisconect conn (msgWords !! 5)
         _ -> liftIO $ putStrLn "Unknown request"
+
+sendResponse :: Socket -> String -> Server ()
+sendResponse conn response = do
+    liftIO $ putStrLn $ "SENDING RESPONSE - " ++ response ++ "\n"
+    void $ liftIO $ send conn response
+
+-- Joining
 
 handleJoin :: Socket -> String -> String -> Server ()
 handleJoin conn reqChannelName reqUserName = do
-    userMap <- getUsers
-    case Map.lookup reqUserName userMap of
+    usersMap <- getUsers
+    case Map.lookup reqUserName usersMap of
         Nothing -> do
-            num <- liftIO (randomIO :: IO Int)
-            let newUser = User num reqUserName conn
-            updateUsers $ Map.insert reqUserName newUser userMap
+            joinID <- liftIO (randomIO :: IO Int)
+            let newUser = User joinID reqUserName conn
+            updateUsers $ Map.insert reqUserName newUser usersMap
         Just _ -> return ()
 
-    channelMap <- getChannels
+    channelsMap <- getChannels
 
-    case Map.lookup reqChannelName channelMap of
+    let channelHash = hash reqChannelName
+
+    case Map.lookup channelHash channelsMap of
         Nothing -> do
-            num <- liftIO (randomIO :: IO Int)
-            let newChannel = Channel num reqChannelName [reqUserName]
-            updateChannels $ Map.insert reqChannelName newChannel channelMap
+            let newChannel = Channel channelHash reqChannelName [reqUserName]
+            updateChannels $ Map.insert channelHash newChannel channelsMap
         Just channel -> do
             let newChannel = channel & channelUsers .~ reqUserName : (channel ^. channelUsers)
-            updateChannels $ Map.adjust (const newChannel) reqChannelName channelMap
+            updateChannels $ Map.adjust (const newChannel) channelHash channelsMap
 
-    sendJoinResponse conn reqChannelName
+    sendJoinResponse conn channelHash
 
-sendJoinResponse :: Socket -> String -> Server ()
-sendJoinResponse conn reqChannelName = do
-    channelMap <- getChannels
+sendJoinResponse :: Socket -> Int -> Server ()
+sendJoinResponse conn channelHash = do
+    channelsMap <- getChannels
 
-    let channel = fromJust (channelMap ^. at reqChannelName)
+    let channel = fromJust (channelsMap ^. at channelHash)
         chatroomName = channel ^. channelName
         roomRef = channel ^. channelID
 
@@ -149,9 +161,43 @@ sendJoinResponse conn reqChannelName = do
                    "ROOM_REF:" ++ show roomRef ++ "\n" ++
                    "JOIN_ID:" ++ show joinID
 
-    liftIO $ putStrLn response
+    sendResponse conn response
 
-    void $ liftIO $ send conn response
+-- Leaving
+
+handleLeave :: Socket -> Int -> String -> String -> Server ()
+handleLeave conn roomRef joinID userName = do
+    channelsMap <- getChannels
+    case Map.lookup roomRef channelsMap of
+        Just channel -> do
+            let newChannel = channel & channelUsers .~ delete userName (channel ^. channelUsers)
+            updateChannels $ Map.adjust (const newChannel) roomRef channelsMap
+        Nothing -> return ()
+
+    sendLeaveResponse conn roomRef joinID
+
+sendLeaveResponse :: Socket -> Int -> String -> Server ()
+sendLeaveResponse conn roomRef joinID = do
+    let response = "LEFT_CHATROOM: " ++ show roomRef ++ "\n" ++
+                   "JOIN_ID: " ++ joinID ++ "\n"
+
+    sendResponse conn response
+
+-- Disconnecting
+
+handleDisconect :: Socket -> String -> Server ()
+handleDisconect conn requestUserName = do
+    usersMap <- getUsers
+    updateUsers $ Map.delete requestUserName usersMap
+
+    sendDisconnectResponse conn requestUserName
+
+sendDisconnectResponse :: Socket -> String -> Server ()
+sendDisconnectResponse conn requestUserName = do
+    let response = "DISCONNECTED: " ++ requestUserName
+    sendResponse conn response
+
+-- Messaging
 
 buildHELOResponse :: String -> HostName -> Int -> String
 buildHELOResponse message host port =
@@ -160,10 +206,10 @@ buildHELOResponse message host port =
     "Port:" ++ show port ++ "\n" ++
     "StudentID:11350561"
 
-getChannels :: Server (Map String Channel)
+getChannels :: Server (Map Int Channel)
 getChannels = use serverChannels >>= liftIO . readMVar
 
-updateChannels :: Map String Channel -> Server ()
+updateChannels :: Map Int Channel -> Server ()
 updateChannels channels = do
     channelsMVar <- use serverChannels
     void $ liftIO $ swapMVar channelsMVar channels

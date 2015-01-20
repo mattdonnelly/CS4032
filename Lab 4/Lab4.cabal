@@ -16,6 +16,7 @@ executable Lab4
   ghc-options:         -Wall
   build-depends:       base >=4.7 && <4.8,
                        containers,
+                       hashable,
                        lens,
                        mtl,
                        network,
