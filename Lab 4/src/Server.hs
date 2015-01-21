@@ -11,8 +11,8 @@ import Control.Monad.State
 import Data.Hashable
 import Data.List (delete)
 import Data.Map (Map)
-import Data.Maybe (fromJust)
 import qualified Data.Map as Map
+import Data.Maybe (fromJust)
 import Network.Socket
 import Network.BSD
 import Semaphore
@@ -110,6 +110,7 @@ handleRequest msg conn = do
         "JOIN_CHATROOM:" -> handleJoin conn (msgWords !! 1) (msgWords !! 7)
         "LEAVE_CHATROOM:" -> handleLeave conn (read $ msgWords !! 1) (msgWords !! 3) (msgWords !! 5)
         "DISCONNECT:" -> handleDisconect conn (msgWords !! 5)
+        "CHAT:" -> handleChat (read $ msgWords !! 1) (msgWords !! 5) (msgWords !! 7)
         _ -> liftIO $ putStrLn "Unknown request"
 
 sendResponse :: Socket -> String -> Server ()
@@ -120,13 +121,13 @@ sendResponse conn response = do
 -- Joining
 
 handleJoin :: Socket -> String -> String -> Server ()
-handleJoin conn reqChannelName reqUserName = do
+handleJoin conn reqChannelName clientName = do
     usersMap <- getUsers
-    case Map.lookup reqUserName usersMap of
+    case Map.lookup clientName usersMap of
         Nothing -> do
             joinID <- liftIO (randomIO :: IO Int)
-            let newUser = User joinID reqUserName conn
-            updateUsers $ Map.insert reqUserName newUser usersMap
+            let newUser = User joinID clientName conn
+            updateUsers $ Map.insert clientName newUser usersMap
         Just _ -> return ()
 
     channelsMap <- getChannels
@@ -135,10 +136,10 @@ handleJoin conn reqChannelName reqUserName = do
 
     case Map.lookup channelHash channelsMap of
         Nothing -> do
-            let newChannel = Channel channelHash reqChannelName [reqUserName]
+            let newChannel = Channel channelHash reqChannelName [clientName]
             updateChannels $ Map.insert channelHash newChannel channelsMap
         Just channel -> do
-            let newChannel = channel & channelUsers .~ reqUserName : (channel ^. channelUsers)
+            let newChannel = channel & channelUsers .~ clientName : (channel ^. channelUsers)
             updateChannels $ Map.adjust (const newChannel) channelHash channelsMap
 
     sendJoinResponse conn channelHash
@@ -166,11 +167,11 @@ sendJoinResponse conn channelHash = do
 -- Leaving
 
 handleLeave :: Socket -> Int -> String -> String -> Server ()
-handleLeave conn roomRef joinID userName = do
+handleLeave conn roomRef joinID clientName = do
     channelsMap <- getChannels
     case Map.lookup roomRef channelsMap of
         Just channel -> do
-            let newChannel = channel & channelUsers .~ delete userName (channel ^. channelUsers)
+            let newChannel = channel & channelUsers .~ delete clientName (channel ^. channelUsers)
             updateChannels $ Map.adjust (const newChannel) roomRef channelsMap
         Nothing -> return ()
 
@@ -186,18 +187,35 @@ sendLeaveResponse conn roomRef joinID = do
 -- Disconnecting
 
 handleDisconect :: Socket -> String -> Server ()
-handleDisconect conn requestUserName = do
+handleDisconect conn clientName = do
     usersMap <- getUsers
-    updateUsers $ Map.delete requestUserName usersMap
+    updateUsers $ Map.delete clientName usersMap
 
-    sendDisconnectResponse conn requestUserName
+    sendDisconnectResponse conn clientName
 
 sendDisconnectResponse :: Socket -> String -> Server ()
-sendDisconnectResponse conn requestUserName = do
-    let response = "DISCONNECTED: " ++ requestUserName
+sendDisconnectResponse conn clientName = do
+    let response = "DISCONNECTED: " ++ clientName
     sendResponse conn response
 
 -- Messaging
+
+handleChat :: Int -> String -> String -> Server ()
+handleChat roomRef clientName message = do
+    usersMap <- getUsers
+    channelsMap <- getChannels
+    let users = (fromJust $ channelsMap ^. at roomRef) ^. channelUsers
+    forM_ users $ \userName ->
+        case Map.lookup userName usersMap of
+            Nothing -> return ()
+            Just user -> sendChatResponse (user ^. userConn) roomRef clientName message
+
+sendChatResponse :: Socket -> Int -> String -> String -> Server ()
+sendChatResponse conn roomRef clientName message = do
+    let response = "CHAT: " ++ show roomRef ++ "\n" ++
+                   "CLIENT_NAME: " ++ clientName ++ "\n" ++
+                   "MESSAGE: " ++ message
+    sendResponse conn response
 
 buildHELOResponse :: String -> HostName -> Int -> String
 buildHELOResponse message host port =
