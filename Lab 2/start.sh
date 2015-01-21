@@ -1,3 +1,3 @@
 #!/bin/bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-"$DIR/bin/server" "$@"
+"$DIR/bin/Server" "$@"
