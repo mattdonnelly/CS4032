@@ -68,7 +68,7 @@ startServer port =
             sClose sock)
 
         (\sock -> do
-            putStrLn $ "Listening on port " ++ show port ++ "..."
+            putStrLn $ "Listening on port " ++ port ++ "..."
 
             host <- getFQDN
             sem <- newSemaphore maxConnections
@@ -242,7 +242,7 @@ handleHELO conn message = do
     port <- use serverPort
     let response = message ++ "\n" ++
                    "IP:" ++ host ++ "\n" ++
-                   "Port:" ++ show port ++ "\n" ++
+                   "Port:" ++ port ++ "\n" ++
                    "StudentID:11350561"
     sendResponse conn response
 
