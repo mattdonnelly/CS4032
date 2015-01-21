@@ -107,6 +107,7 @@ handleRequest msg conn = do
     let msgWords = words msg
 
     case head msgWords of
+        "HELO" -> handleHELO conn (msgWords !! 1)
         "JOIN_CHATROOM:" -> handleJoin conn (msgWords !! 1) (msgWords !! 7)
         "LEAVE_CHATROOM:" -> handleLeave conn (read $ msgWords !! 1) (msgWords !! 3) (msgWords !! 5)
         "DISCONNECT:" -> handleDisconect conn (msgWords !! 5)
@@ -204,7 +205,7 @@ handleChat :: Int -> String -> String -> Server ()
 handleChat roomRef clientName message = do
     usersMap <- getUsers
     channelsMap <- getChannels
-    let users = (fromJust $ channelsMap ^. at roomRef) ^. channelUsers
+    let users = fromJust $ channelsMap ^. at roomRef ^? channelUsers
     forM_ users $ \userName ->
         case Map.lookup userName usersMap of
             Nothing -> return ()
@@ -217,12 +218,17 @@ sendChatResponse conn roomRef clientName message = do
                    "MESSAGE: " ++ message
     sendResponse conn response
 
-buildHELOResponse :: String -> HostName -> Int -> String
-buildHELOResponse message host port =
-    message ++ "\n" ++
-    "IP:" ++ host ++ "\n" ++
-    "Port:" ++ show port ++ "\n" ++
-    "StudentID:11350561"
+-- HELO
+
+handleHELO :: Socket -> String -> HostName -> Int -> Server ()
+handleHELO message = do
+    host <- use serverHost
+    port <- use serverPort
+    let response = message ++ "\n" ++
+                   "IP:" ++ host ++ "\n" ++
+                   "Port:" ++ show port ++ "\n" ++
+                   "StudentID:11350561"
+    sendResponse conn response
 
 getChannels :: Server (Map Int Channel)
 getChannels = use serverChannels >>= liftIO . readMVar
