@@ -112,13 +112,13 @@ handleRequest msg conn =
     else if "KILL_SERVICE" `isPrefixOf` msg then
         use serverSock >>= liftIO . sClose
     else if "JOIN_CHATROOM" `isPrefixOf` msg then
-        handleJoin conn (parseParam $ msgWords !! 1) (parseParam $ msgWords !! 7)
+        handleJoin conn (parseParam $ msgWords !! 0) (parseParam $ msgWords !! 3)
     else if "LEAVE_CHATROOM" `isPrefixOf` msg then
-        handleLeave conn (read $ parseParam $ msgWords !! 1) (parseParam $ msgWords !! 3) (parseParam $ msgWords !! 5)
+        handleLeave conn (read $ parseParam $ msgWords !! 0) (parseParam $ msgWords !! 1) (parseParam $ msgWords !! 2)
     else if "DISCONNECT" `isPrefixOf` msg then
-        handleDisconect conn (parseParam $ msgWords !! 5)
+        handleDisconect conn (parseParam $ msgWords !! 2)
     else if "CHAT:" `isPrefixOf` msg then
-        handleChat (read $ parseParam $ msgWords !! 1) (parseParam $ msgWords !! 5) (parseParam $ msgWords !! 7)
+        handleChat (read $ parseParam $ msgWords !! 0) (parseParam $ msgWords !! 2) (parseParam $ msgWords !! 3)
     else
         liftIO $ putStrLn "Unknown request"
 
