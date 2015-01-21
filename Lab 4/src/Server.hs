@@ -85,9 +85,7 @@ acceptConnections env = forever $ do
 
     accepted <- try (accept sock)
     case accepted of
-        Left (_ :: IOException) -> do
-            putStrLn "Disconnecting..."
-            exitSuccess
+        Left (_ :: IOException) -> exitSuccess
         Right (conn, _) -> do
             canAquireSem <- checkSemaphore sem
             if canAquireSem then
