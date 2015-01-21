@@ -30,5 +30,6 @@ The folders for each solution contain a script called ```compile.sh``` which can
 
 ### Lab 4
 
-- Dependecies can be installed using cabal by running: `cabal sanbox init && cabal install --only-dependecies`
+- Dependecies can be installed using cabal by running: 
+```cabal sanbox init && cabal install --only-dependecies```
 - Run ```cabal run <port>``` to start the server on a specified port
