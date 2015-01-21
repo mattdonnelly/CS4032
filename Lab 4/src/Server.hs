@@ -108,6 +108,7 @@ handleRequest msg conn = do
 
     case head msgWords of
         "HELO" -> handleHELO conn (msgWords !! 1)
+        "KILL_SERVICE" -> use serverSock >>= liftIO . sClose
         "JOIN_CHATROOM:" -> handleJoin conn (msgWords !! 1) (msgWords !! 7)
         "LEAVE_CHATROOM:" -> handleLeave conn (read $ msgWords !! 1) (msgWords !! 3) (msgWords !! 5)
         "DISCONNECT:" -> handleDisconect conn (msgWords !! 5)
@@ -205,7 +206,7 @@ handleChat :: Int -> String -> String -> Server ()
 handleChat roomRef clientName message = do
     usersMap <- getUsers
     channelsMap <- getChannels
-    let users = fromJust $ channelsMap ^. at roomRef ^? channelUsers
+    let users = (fromJust $ channelsMap ^. at roomRef) ^. channelUsers
     forM_ users $ \userName ->
         case Map.lookup userName usersMap of
             Nothing -> return ()
@@ -220,8 +221,8 @@ sendChatResponse conn roomRef clientName message = do
 
 -- HELO
 
-handleHELO :: Socket -> String -> HostName -> Int -> Server ()
-handleHELO message = do
+handleHELO :: Socket -> String -> Server ()
+handleHELO conn message = do
     host <- use serverHost
     port <- use serverPort
     let response = message ++ "\n" ++
