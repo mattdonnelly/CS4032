@@ -221,7 +221,7 @@ handleChat :: Int -> String -> String -> Server ()
 handleChat roomRef clientName message = do
     usersMap <- getUsers
     channelsMap <- getChannels
-    let users = (fromJust channelsMap ^. at roomRef) ^. channelUsers
+    let users = fromJust (channelsMap ^. at roomRef) ^. channelUsers
     forM_ users $ \userName ->
         case Map.lookup userName usersMap of
             Nothing -> return ()
