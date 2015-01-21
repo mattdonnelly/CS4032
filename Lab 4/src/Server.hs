@@ -9,7 +9,8 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.State
 import Data.Hashable
-import Data.List (delete)
+import Data.List (delete, isPrefixOf)
+import Data.List.Split (splitOn)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
@@ -103,17 +104,27 @@ processRequest conn = forever $ do
             handleRequest msg conn
 
 handleRequest :: String -> Socket -> Server ()
-handleRequest msg conn = do
-    let msgWords = words msg
+handleRequest msg conn =
+    let msgWords = words msg in
 
-    case head msgWords of
-        "HELO" -> handleHELO conn (msgWords !! 1)
-        "KILL_SERVICE" -> use serverSock >>= liftIO . sClose
-        "JOIN_CHATROOM:" -> handleJoin conn (msgWords !! 1) (msgWords !! 7)
-        "LEAVE_CHATROOM:" -> handleLeave conn (read $ msgWords !! 1) (msgWords !! 3) (msgWords !! 5)
-        "DISCONNECT:" -> handleDisconect conn (msgWords !! 5)
-        "CHAT:" -> handleChat (read $ msgWords !! 1) (msgWords !! 5) (msgWords !! 7)
-        _ -> liftIO $ putStrLn "Unknown request"
+    if "HELO" `isPrefixOf` msg then
+        handleHELO conn (msgWords !! 1)
+    else if "KILL_SERVICE" `isPrefixOf` msg then
+        use serverSock >>= liftIO . sClose
+    else if "JOIN_CHATROOM" `isPrefixOf` msg then
+        handleJoin conn (parseParam $ msgWords !! 1) (parseParam $ msgWords !! 7)
+    else if "LEAVE_CHATROOM" `isPrefixOf` msg then
+        handleLeave conn (read $ parseParam $ msgWords !! 1) (parseParam $ msgWords !! 3) (parseParam $ msgWords !! 5)
+    else if "DISCONNECT" `isPrefixOf` msg then
+        handleDisconect conn (parseParam $ msgWords !! 5)
+    else if "CHAT:" `isPrefixOf` msg then
+        handleChat (read $ parseParam $ msgWords !! 1) (parseParam $ msgWords !! 5) (parseParam $ msgWords !! 7)
+    else
+        liftIO $ putStrLn "Unknown request"
+
+parseParam :: String -> String
+parseParam str = splitStr !! 1
+    where splitStr = splitOn ":" str
 
 sendResponse :: Socket -> String -> Server ()
 sendResponse conn response = do
