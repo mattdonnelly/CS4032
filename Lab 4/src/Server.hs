@@ -83,14 +83,18 @@ acceptConnections env = forever $ do
     let sock = env ^. serverSock
         sem  = env ^. serverSem
 
-    (conn, _) <- accept sock
-
-    canAquireSem <- checkSemaphore sem
-    if canAquireSem then
-        void $ forkIO $ void $ runStateT (processRequest conn) env
-    else do
-        void $ send conn "SERVER_BUSY"
-        sClose conn
+    accepted <- try (accept sock)
+    case accepted of
+        Left (_ :: IOException) -> do
+            putStrLn "Disconnecting..."
+            exitSuccess
+        Right (conn, _) -> do
+            canAquireSem <- checkSemaphore sem
+            if canAquireSem then
+                void $ forkIO $ void $ runStateT (processRequest conn) env
+            else do
+                void $ send conn "SERVER_BUSY"
+                sClose conn
 
 processRequest :: Socket -> Server ()
 processRequest conn = forever $ do
@@ -192,8 +196,8 @@ handleLeave conn roomRef joinID clientName = do
 
 sendLeaveResponse :: Socket -> Int -> String -> Server ()
 sendLeaveResponse conn roomRef joinID = do
-    let response = "LEFT_CHATROOM: " ++ show roomRef ++ "\n" ++
-                   "JOIN_ID: " ++ joinID ++ "\n"
+    let response = "LEFT_CHATROOM:" ++ show roomRef ++ "\n" ++
+                   "JOIN_ID:" ++ joinID ++ "\n"
 
     sendResponse conn response
 
@@ -208,7 +212,7 @@ handleDisconect conn clientName = do
 
 sendDisconnectResponse :: Socket -> String -> Server ()
 sendDisconnectResponse conn clientName = do
-    let response = "DISCONNECTED: " ++ clientName
+    let response = "DISCONNECTED:" ++ clientName
     sendResponse conn response
 
 -- Messaging
@@ -225,9 +229,9 @@ handleChat roomRef clientName message = do
 
 sendChatResponse :: Socket -> Int -> String -> String -> Server ()
 sendChatResponse conn roomRef clientName message = do
-    let response = "CHAT: " ++ show roomRef ++ "\n" ++
-                   "CLIENT_NAME: " ++ clientName ++ "\n" ++
-                   "MESSAGE: " ++ message
+    let response = "CHAT:" ++ show roomRef ++ "\n" ++
+                   "CLIENT_NAME:" ++ clientName ++ "\n" ++
+                   "MESSAGE:" ++ message
     sendResponse conn response
 
 -- HELO
