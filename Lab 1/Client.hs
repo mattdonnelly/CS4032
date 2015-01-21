@@ -5,7 +5,10 @@ import Control.Monad
 import Control.Exception
 import Data.List
 
-path     = "GET /echo.php?message="
+path :: String
+path = "GET /echo.php?message="
+
+protocol :: String
 protocol = "HTTP/1.1\r\n\r\n"
 
 startClient :: String -> Int -> IO ()
@@ -15,7 +18,7 @@ startClient host port = forever $ do
     prompt "Enter a message to send: "
     message <- getLine
 
-    send sock (path ++ buildQuery message ++ " " ++ protocol)
+    void $ send sock (path ++ buildQuery message ++ " " ++ protocol)
 
     response <- receiveResponse sock ""
     putStrLn response
@@ -45,5 +48,5 @@ prompt p = do
 main :: IO ()
 main = withSocketsDo $ do
     (host:portStr:_) <- getArgs
-    let port = (read $ portStr :: Int)
+    let port = read portStr :: Int
     startClient host port

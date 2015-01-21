@@ -1,14 +1,17 @@
 {-# LANGUAGE BangPatterns #-}
 
+module Server where
+
+import Control.Concurrent
+import Control.Exception (try)
+import Control.Monad
 import Network
 import Network.BSD
 import System.IO
 import System.Exit
 import System.Environment
-import Control.Exception
-import Control.Concurrent
-import Control.Concurrent.MVar
 
+maxConnections :: Int
 maxConnections = 200
 
 -- Semaphore
@@ -35,7 +38,7 @@ signalSemaphore (Semaphore m) =
 
 startServer :: Int -> IO ()
 startServer port = do
-    putStrLn $ "Listening on port " ++ (show port) ++ "..."
+    putStrLn $ "Listening on port " ++ show port ++ "..."
     sock <- listenOn $ PortNumber (fromIntegral port)
     sem <- newSemaphore maxConnections
     host <- getFQDN
@@ -53,7 +56,7 @@ acceptConnections sock host port sem = do
 
             canAquireSem <- checkSemaphore sem
             if canAquireSem then do
-                forkIO $ processRequest sock handle host port sem
+                void $ forkIO $ processRequest sock handle host port sem
                 acceptConnections sock host port sem
             else do
                 hPutStrLn handle "SERVER_BUSY"
@@ -63,20 +66,18 @@ acceptConnections sock host port sem = do
 processRequest :: Socket -> Handle -> HostName -> Int -> Semaphore -> IO ()
 processRequest sock handle host port sem = do
     message <- hGetLine handle
-    putStrLn $ "[" ++ host ++ ":" ++ (show port) ++ "]" ++ " " ++ message
+    putStrLn $ "[" ++ host ++ ":" ++ show port ++ "]" ++ " " ++ message
 
     case head $ words message of
         "HELO" -> hPutStr handle $ buildHELOResponse message host port
         "KILL_SERVICE" -> hPutStr handle message >> sClose sock
-        otherwise -> putStrLn $ "Unknown Command:" ++ message
+        _ -> putStrLn $ "Unknown Command:" ++ message
 
     hClose handle
     signalSemaphore sem
 
 getFQDN :: IO HostName
-getFQDN = do
-    (HostEntry host _ _ _) <- (getHostName >>= getHostByName)
-    return host
+getFQDN = liftM hostName (getHostName >>= getHostByName)
 
 buildHELOResponse :: String -> HostName -> Int -> String
 buildHELOResponse message host port = message ++ "\n" ++
@@ -87,5 +88,5 @@ buildHELOResponse message host port = message ++ "\n" ++
 main :: IO ()
 main = withSocketsDo $ do
     args <- getArgs
-    let port = (read $ head args :: Int)
+    let port = read $ head args :: Int
     startServer port

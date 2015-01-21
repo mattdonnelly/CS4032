@@ -116,13 +116,13 @@ handleRequest msg conn =
     else if "KILL_SERVICE" `isPrefixOf` msg then
         use serverSock >>= liftIO . sClose
     else if "JOIN_CHATROOM" `isPrefixOf` msg then
-        handleJoin conn (parseParam $ msgWords !! 0) (parseParam $ msgWords !! 3)
+        handleJoin conn (parseParam $ head msgWords) (parseParam $ msgWords !! 3)
     else if "LEAVE_CHATROOM" `isPrefixOf` msg then
-        handleLeave conn (read $ parseParam $ msgWords !! 0) (parseParam $ msgWords !! 1) (parseParam $ msgWords !! 2)
+        handleLeave conn (read $ parseParam $ head msgWords) (parseParam $ msgWords !! 1) (parseParam $ msgWords !! 2)
     else if "DISCONNECT" `isPrefixOf` msg then
         handleDisconect conn (parseParam $ msgWords !! 2)
     else if "CHAT:" `isPrefixOf` msg then
-        handleChat (read $ parseParam $ msgWords !! 0) (parseParam $ msgWords !! 2) (parseParam $ msgWords !! 3)
+        handleChat (read $ parseParam $ head msgWords) (parseParam $ msgWords !! 2) (parseParam $ msgWords !! 3)
     else
         liftIO $ putStrLn "Unknown request"
 
@@ -221,7 +221,7 @@ handleChat :: Int -> String -> String -> Server ()
 handleChat roomRef clientName message = do
     usersMap <- getUsers
     channelsMap <- getChannels
-    let users = (fromJust $ channelsMap ^. at roomRef) ^. channelUsers
+    let users = (fromJust channelsMap ^. at roomRef) ^. channelUsers
     forM_ users $ \userName ->
         case Map.lookup userName usersMap of
             Nothing -> return ()
